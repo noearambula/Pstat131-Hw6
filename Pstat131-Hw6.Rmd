@@ -1,0 +1,158 @@
+---
+title: "Pstat131 Hw6"
+author: "Noe Arambula"
+date: '2022-05-25'
+output:
+  pdf_document:
+    toc: true
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: show
+---
+
+# Loading Packages
+
+```{r message=FALSE, warning=FALSE}
+library(yardstick)
+library(tidyverse)
+library(tidymodels)
+library(ISLR)
+library(rpart.plot)
+library(vip)
+library(janitor)
+library(randomForest)
+library(xgboost)
+library(corrr)
+library(corrplot)
+
+tidymodels_prefer()
+```
+
+# Set Data and Seed
+
+```{r}
+pokemon <- read_csv("Pokemon.csv")
+
+set.seed(777)
+```
+
+# Question 1
+
+Read in the data and set things up as in Homework 5:
+
+-   Use `clean_names()`
+
+-   Filter out the rarer Pokémon types
+
+-   Convert `type_1` and `legendary` to factors
+
+Do an initial split of the data; you can choose the percentage for splitting. Stratify on the outcome variable.
+
+Fold the training set using *v*-fold cross-validation, with `v = 5`. Stratify on the outcome variable.
+
+Set up a recipe to predict `type_1` with `legendary`, `generation`, `sp_atk`, `attack`, `speed`, `defense`, `hp`, and `sp_def`:
+
+-   Dummy-code `legendary` and `generation`;
+
+-   Center and scale all predictors.
+
+```{r}
+
+```
+
+# Question 2
+
+Create a correlation matrix of the training set, using the `corrplot` package. *Note: You can choose how to handle the continuous variables for this plot; justify your decision(s).*
+
+What relationships, if any, do you notice? Do these relationships make sense to you?
+
+```{r}
+
+
+```
+
+# Question 3
+
+First, set up a decision tree model and workflow. Tune the `cost_complexity` hyperparameter. Use the same levels we used in Lab 7 -- that is, `range = c(-3, -1)`. Specify that the metric we want to optimize is `roc_auc`.
+
+Print an `autoplot()` of the results. What do you observe? Does a single decision tree perform better with a smaller or larger complexity penalty?
+
+```{r}
+
+```
+
+# Question 4
+
+What is the `roc_auc` of your best-performing pruned decision tree on the folds? *Hint: Use `collect_metrics()` and `arrange()`.*
+
+```{r}
+
+```
+
+# Question 5
+
+Using `rpart.plot`, fit and visualize your best-performing pruned decision tree with the *training* set.
+
+```{r}
+```
+
+# Question 5 (continued)
+
+Now set up a random forest model and workflow. Use the `ranger` engine and set `importance = "impurity"`. Tune `mtry`, `trees`, and `min_n`. Using the documentation for `rand_forest()`, explain in your own words what each of these hyperparameters represent.
+
+Create a regular grid with 8 levels each. You can choose plausible ranges for each hyperparameter. Note that `mtry` should not be smaller than 1 or larger than 8. **Explain why not. What type of model would `mtry = 8` represent?**
+
+```{r}
+
+```
+
+# Question 6
+
+Specify `roc_auc` as a metric. Tune the model and print an `autoplot()` of the results. What do you observe? What values of the hyperparameters seem to yield the best performance?
+
+```{r}
+  
+```
+
+# Question 7
+
+What is the `roc_auc` of your best-performing random forest model on the folds? *Hint: Use `collect_metrics()` and `arrange()`.*
+
+```{r}
+
+```
+
+# Question 8
+
+Create a variable importance plot, using `vip()`, with your best-performing random forest model fit on the *training* set.
+
+Which variables were most useful? Which were least useful? Are these results what you expected, or not?
+
+```{r}
+
+```
+
+# Question 9
+
+Finally, set up a boosted tree model and workflow. Use the `xgboost` engine. Tune `trees`. Create a regular grid with 10 levels; let `trees` range from 10 to 2000. Specify `roc_auc` and again print an `autoplot()` of the results.
+
+What do you observe?
+
+What is the `roc_auc` of your best-performing boosted tree model on the folds? *Hint: Use `collect_metrics()` and `arrange()`.*
+
+```{r}
+
+```
+
+# Question 10
+
+Display a table of the three ROC AUC values for your best-performing pruned tree, random forest, and boosted tree models. Which performed best on the folds? Select the best of the three and use `select_best()`, `finalize_workflow()`, and `fit()` to fit it to the *testing* set.
+
+Print the AUC value of your best-performing model on the testing set. Print the ROC curves. Finally, create and visualize a confusion matrix heat map.
+
+Which classes was your model most accurate at predicting? Which was it worst at?
+
+```{r}
+
+```
