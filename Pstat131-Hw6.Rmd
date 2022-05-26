@@ -57,8 +57,45 @@ Set up a recipe to predict `type_1` with `legendary`, `generation`, `sp_atk`, `a
 
 -   Center and scale all predictors.
 
+    ## Setup Like Hw 5
+
 ```{r}
 
+clean_pokemon <- clean_names(pokemon)
+
+# Filter entire dataset
+filtered_pokemon <- filter(clean_pokemon, type_1 == "Bug" | type_1 == "Fire" 
+                          | type_1 == "Grass" | type_1== "Normal" | 
+                          type_1 == "Water" | type_1 == "Psychic")
+
+# Convert type_1 and legendary to factors
+filtered_pokemon$type_1 <- factor(filtered_pokemon$type_1)
+filtered_pokemon$legendary <- factor(filtered_pokemon$legendary)
+
+```
+
+##   Initial Split, Vfold, and Recipe Setup
+
+```{r}
+set.seed(777)
+
+# Initial split
+pokemon_split <- initial_split(filtered_pokemon, strata = type_1, prop = 0.8)
+
+pokemon_train <- training(pokemon_split)
+pokemon_test <- testing(pokemon_split)
+
+# Folding Training Data
+set.seed(777)
+pokemon_fold <- vfold_cv(pokemon_train, v = 5, strata = type_1)
+
+# Recipe
+pokemon_recipe <- recipe(type_1 ~ legendary + generation + sp_atk + attack 
+                         + speed + defense + hp + sp_def, data = pokemon_train) %>%
+  step_dummy(legendary, generation) %>%   # creates dummy variables
+  step_normalize(all_predictors())    # Centers and Scales all variables
+
+pokemon_recipe
 ```
 
 # Question 2
@@ -68,9 +105,16 @@ Create a correlation matrix of the training set, using the `corrplot` package. *
 What relationships, if any, do you notice? Do these relationships make sense to you?
 
 ```{r}
-
+# note for a correlation matrix variable must be numeric
+pokemon_train %>% 
+  select(where(is.numeric)) %>% 
+  cor() %>% 
+  corrplot(type = 'lower',
+           method = 'number')
 
 ```
+
+I chose to leave all continuous variables in since I feel it would be important to see all relationships. I see a strong relationship between generation and number which makes complete sense since pokemon that were created later are part of the next generation accordingly. There are also relationships between all of a Pokemon's stats and the total which also makes sense since the stats are what makeup the total number. Special defense and defense seem to be slightly correlated as well.
 
 # Question 3
 
@@ -79,8 +123,37 @@ First, set up a decision tree model and workflow. Tune the `cost_complexity` hyp
 Print an `autoplot()` of the results. What do you observe? Does a single decision tree perform better with a smaller or larger complexity penalty?
 
 ```{r}
+# general decision tree specification
+tree_spec <- decision_tree() %>%
+  set_engine("rpart")
 
+# classificaition decision tree engine/model
+class_tree_spec <- tree_spec %>%
+  set_mode("classification")
+
+# Workflow tuning cost complexity
+class_tree_wf <- workflow() %>%
+  add_model(class_tree_spec %>% set_args(cost_complexity = tune())) %>%
+  add_recipe(pokemon_recipe)
+
+# setup grid
+set.seed(777)
+
+param_grid <- grid_regular(cost_complexity(range = c(-3, -1)), levels = 10)
+
+tune_res <- tune_grid(
+  class_tree_wf, 
+  resamples = pokemon_fold, 
+  grid = param_grid, 
+  metrics = metric_set(roc_auc)
+)
 ```
+
+```{r warning=FALSE}
+autoplot(tune_res)
+```
+
+The lower the complexity parameter the higher and better roc_auc we get. It seems that the 6th model performs the best with cost complexity parameter about 0.02
 
 # Question 4
 
@@ -88,13 +161,33 @@ What is the `roc_auc` of your best-performing pruned decision tree on the folds?
 
 ```{r}
 
+# this will also show the best model based on roc_auc but does not show the actual roc_auc number
+best_model <- select_best(tune_res, metric = "roc_auc")
+best_model
+
+# shows all models and organizes from worst to best roc_auc
+collect_metrics(tune_res) %>%
+  arrange(mean)
 ```
+
+The roc_auc of my best-performing pruned decision tree on the folds is 0.6535274
 
 # Question 5
 
 Using `rpart.plot`, fit and visualize your best-performing pruned decision tree with the *training* set.
 
 ```{r}
+#fit model
+best_model <- select_best(tune_res)
+
+class_tree_final <- finalize_workflow(class_tree_wf, best_model)
+
+class_tree_final_fit <- fit(class_tree_final, data = pokemon_train)
+
+# visualize
+class_tree_final_fit %>%
+  extract_fit_engine() %>%
+  rpart.plot()
 ```
 
 # Question 5 (continued)
