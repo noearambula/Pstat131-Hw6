@@ -25,6 +25,7 @@ library(randomForest)
 library(xgboost)
 library(corrr)
 library(corrplot)
+library(ranger)
 
 tidymodels_prefer()
 ```
@@ -74,7 +75,7 @@ filtered_pokemon$legendary <- factor(filtered_pokemon$legendary)
 
 ```
 
-##   Initial Split, Vfold, and Recipe Setup
+## Initial Split, Vfold, and Recipe Setup
 
 ```{r}
 set.seed(777)
@@ -92,7 +93,7 @@ pokemon_fold <- vfold_cv(pokemon_train, v = 5, strata = type_1)
 # Recipe
 pokemon_recipe <- recipe(type_1 ~ legendary + generation + sp_atk + attack 
                          + speed + defense + hp + sp_def, data = pokemon_train) %>%
-  step_dummy(legendary, generation) %>%   # creates dummy variables
+  step_dummy(all_nominal_predictors()) %>%   # creates dummy variables
   step_normalize(all_predictors())    # Centers and Scales all variables
 
 pokemon_recipe
@@ -197,15 +198,39 @@ Now set up a random forest model and workflow. Use the `ranger` engine and set `
 Create a regular grid with 8 levels each. You can choose plausible ranges for each hyperparameter. Note that `mtry` should not be smaller than 1 or larger than 8. **Explain why not. What type of model would `mtry = 8` represent?**
 
 ```{r}
+# Random forest model and workflow
+rf_mod <- rand_forest(mtry = tune(), trees = tune(), min_n = tune()) %>%
+  set_engine("ranger", importance = "impurity") %>%
+  set_mode("classification")
+
+rf_wf <- workflow() %>%
+  add_recipe(pokemon_recipe) %>%
+  add_model(rf_mod)
+
+# grid
+param_grid <- grid_regular(mtry(range = c(2, 6)), 
+                     trees(range = c(2, 5)), 
+                     min_n(), levels = c(8,8,8)) # I am not sure what a good range for min_n would be
 
 ```
+
+Mtry is the number of predictors that will be randomly chosen at each split of the tree models thus it cannot be lower than 1 since then no predictors would be chosen or greater than 8 since we only have 8 predictors. If mtry = 8 that would represent a bagging model.
+
+Trees represents the number of trees that will be used in each model
+
+min_n represents the minimum number of of data points needed at each node/tree end that is needed in order to split it further into another tree
 
 # Question 6
 
 Specify `roc_auc` as a metric. Tune the model and print an `autoplot()` of the results. What do you observe? What values of the hyperparameters seem to yield the best performance?
 
 ```{r}
-  
+tune_res <- tune_grid(
+  rf_wf, 
+  resamples = pokemon_fold, 
+  grid = param_grid, 
+  metrics = metric_set(roc_auc)
+)
 ```
 
 # Question 7
