@@ -3,12 +3,12 @@ title: "Pstat131 Hw6"
 author: "Noe Arambula"
 date: '2022-05-25'
 output:
-  pdf_document:
-    toc: true
   html_document:
     toc: true
     toc_float: true
     code_folding: show
+  pdf_document:
+    toc: true
 ---
 
 # Loading Packages
@@ -268,7 +268,11 @@ Create a variable importance plot, using `vip()`, with your best-performing rand
 
 Which variables were most useful? Which were least useful? Are these results what you expected, or not?
 
+<<<<<<< HEAD
 ```{r eval=FALSE, include=TRUE}
+=======
+```{r eval=FALSE, include=FALSE}
+>>>>>>> 1e23f9ad402b026212261dbbf9176b2cd5bb7dd9
 best_model_rf <- select_best(tune_res_rf)
 
 rf_final <- finalize_workflow(rf_wf, best_model_rf)

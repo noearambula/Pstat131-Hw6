@@ -1904,6 +1904,7 @@ your best-performing random forest model fit on the <em>training</em>
 set.</p>
 <p>Which variables were most useful? Which were least useful? Are these
 results what you expected, or not?</p>
+<<<<<<< HEAD
 <pre class="r"><code>best_model_rf &lt;- select_best(tune_res_rf)
 
 rf_final &lt;- finalize_workflow(rf_wf, best_model_rf)
@@ -1913,6 +1914,8 @@ rf_final_fit &lt;- fit(rf_final, data = pokemon_train)
 vip(rf_final_fit) 
 # could not get this to work had error :
 # Error: Model-specific variable importance scores are currently not available for this type of model.</code></pre>
+=======
+>>>>>>> 1e23f9ad402b026212261dbbf9176b2cd5bb7dd9
 </div>
 <div id="question-9" class="section level1">
 <h1>Question 9</h1>
