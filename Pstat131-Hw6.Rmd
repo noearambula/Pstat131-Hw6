@@ -3,12 +3,12 @@ title: "Pstat131 Hw6"
 author: "Noe Arambula"
 date: '2022-05-25'
 output:
-  pdf_document:
-    toc: true
   html_document:
     toc: true
     toc_float: true
     code_folding: show
+  pdf_document:
+    toc: true
 ---
 
 # Loading Packages
@@ -142,7 +142,13 @@ set.seed(777)
 
 param_grid <- grid_regular(cost_complexity(range = c(-3, -1)), levels = 10)
 
-tune_res <- tune_grid(
+
+
+```
+
+```{r eval = FALSE}
+# will load in the model later instead of running code to save time
+tune_res_tree <- tune_grid(
   class_tree_wf, 
   resamples = pokemon_fold, 
   grid = param_grid, 
@@ -151,7 +157,8 @@ tune_res <- tune_grid(
 ```
 
 ```{r warning=FALSE}
-autoplot(tune_res)
+load(file = "tunedmodels.rda")
+autoplot(tune_res_tree)
 ```
 
 The lower the complexity parameter the higher and better roc_auc we get. It seems that the 6th model performs the best with cost complexity parameter about 0.02
@@ -161,13 +168,13 @@ The lower the complexity parameter the higher and better roc_auc we get. It seem
 What is the `roc_auc` of your best-performing pruned decision tree on the folds? *Hint: Use `collect_metrics()` and `arrange()`.*
 
 ```{r}
-
+set.seed(777)
 # this will also show the best model based on roc_auc but does not show the actual roc_auc number
-best_model <- select_best(tune_res, metric = "roc_auc")
+best_model <- select_best(tune_res_tree, metric = "roc_auc")
 best_model
 
 # shows all models and organizes from worst to best roc_auc
-collect_metrics(tune_res) %>%
+collect_metrics(tune_res_tree) %>%
   arrange(mean)
 ```
 
@@ -179,7 +186,7 @@ Using `rpart.plot`, fit and visualize your best-performing pruned decision tree 
 
 ```{r}
 #fit model
-best_model <- select_best(tune_res)
+best_model <- select_best(tune_res_tree)
 
 class_tree_final <- finalize_workflow(class_tree_wf, best_model)
 
@@ -198,6 +205,7 @@ Now set up a random forest model and workflow. Use the `ranger` engine and set `
 Create a regular grid with 8 levels each. You can choose plausible ranges for each hyperparameter. Note that `mtry` should not be smaller than 1 or larger than 8. **Explain why not. What type of model would `mtry = 8` represent?**
 
 ```{r}
+set.seed(777)
 # Random forest model and workflow
 rf_mod <- rand_forest(mtry = tune(), trees = tune(), min_n = tune()) %>%
   set_engine("ranger", importance = "impurity") %>%
@@ -224,22 +232,35 @@ min_n represents the minimum number of of data points needed at each node/tree e
 
 Specify `roc_auc` as a metric. Tune the model and print an `autoplot()` of the results. What do you observe? What values of the hyperparameters seem to yield the best performance?
 
-```{r}
-tune_res <- tune_grid(
+```{r eval=FALSE}
+# will load in the model later instead of running code to save time
+tune_res_rf <- tune_grid(
   rf_wf, 
   resamples = pokemon_fold, 
   grid = param_grid, 
   metrics = metric_set(roc_auc)
 )
+
 ```
+
+```{r}
+load(file = "tunedmodels.rda")
+set.seed(777)
+autoplot(tune_res_rf)
+```
+
+I notice that generally, the higher number of trees tend to do better. Results for values of mtry vary differently with each number of trees. Values of min_n around 20 tend to do best across all models
 
 # Question 7
 
 What is the `roc_auc` of your best-performing random forest model on the folds? *Hint: Use `collect_metrics()` and `arrange()`.*
 
 ```{r}
-
+collect_metrics(tune_res_rf) %>%
+  arrange(mean)
 ```
+
+The roc_auc of my best performing random forest model on the folds is 0.7159568
 
 # Question 8
 
@@ -247,8 +268,16 @@ Create a variable importance plot, using `vip()`, with your best-performing rand
 
 Which variables were most useful? Which were least useful? Are these results what you expected, or not?
 
-```{r}
+```{r eval=FALSE, include=FALSE}
+best_model_rf <- select_best(tune_res_rf)
 
+rf_final <- finalize_workflow(rf_wf, best_model_rf)
+
+rf_final_fit <- fit(rf_final, data = pokemon_train)
+
+vip(rf_final_fit) 
+# could not get this to work had error :
+# Error: Model-specific variable importance scores are currently not available for this type of model.
 ```
 
 # Question 9
@@ -260,8 +289,42 @@ What do you observe?
 What is the `roc_auc` of your best-performing boosted tree model on the folds? *Hint: Use `collect_metrics()` and `arrange()`.*
 
 ```{r}
+boost_spec <- boost_tree(trees = tune()) %>%
+  set_engine("xgboost") %>%
+  set_mode("classification")
 
+boost_wf <- workflow() %>%
+  add_recipe(pokemon_recipe) %>%
+  add_model(boost_spec)
+
+# grid
+param_grid <- grid_regular(trees(range = c(10, 2000)), levels = 10)
 ```
+
+```{r eval=FALSE}
+# will load in the model later instead of running code to save time
+tune_res_boost <- tune_grid(
+  boost_wf, 
+  resamples = pokemon_fold, 
+  grid = param_grid, 
+  metrics = metric_set(roc_auc)
+)
+```
+
+```{r}
+load(file = "tunedmodels.rda")
+set.seed(777)
+autoplot(tune_res_boost)
+```
+
+I see that thee best number of trees is at about 240 (right before 250)
+
+```{r}
+collect_metrics(tune_res_boost) %>%
+  arrange(mean)
+```
+
+The best roc_auc of my best-performing boosted tree model on the folds is 0.7215399
 
 # Question 10
 
@@ -272,5 +335,39 @@ Print the AUC value of your best-performing model on the testing set. Print the 
 Which classes was your model most accurate at predicting? Which was it worst at?
 
 ```{r}
+# Table of roc_auc values
+auc_table <- matrix(c(0.6535274, 0.7159568, 0.7215399), ncol=3)
+colnames(auc_table ) <- c('Pruned Tree Model','Random Forest Model','Boosted Tree Model')
+rownames(auc_table ) <- c('roc_auc value')
+
+auc_table 
+```
+
+The boosted tree model performed best on the folds and so I will only use select_best() on the boosted tree model
+
+```{r}
+# Select best and fit to testing data
+
+best_boosted <- select_best(tune_res_boost, metric = 'roc_auc')
+
+boosted_final <- finalize_workflow(boost_wf, best_boosted)
+
+overrall_final_fit <- fit(boosted_final, data = pokemon_test)
 
 ```
+
+```{r}
+# UC value of your best-performing model on the testing set
+predicted_data <- augment(overrall_final_fit, new_data = pokemon_train) %>% 
+  select(type_1, starts_with(".pred"))  
+
+predicted_data  %>% roc_auc(type_1, .pred_Bug:.pred_Water)
+```
+
+```{r}
+# Print the ROC curves
+predicted_data %>% roc_curve(type_1, .pred_Bug:.pred_Water) %>% 
+  autoplot()
+```
+
+Model best predicted normal and psychic types and was worst at predicting water types

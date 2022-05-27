@@ -16,111 +16,117 @@ pokemon <- read_csv("Pokemon.csv")
 
 set.seed(777)
 
-titanic$survived =  factor(titanic$survived, levels = c("Yes", "No")) 
-# Note can use parse_factor() in order to give a warning when there is a value not in the set
+clean_pokemon <- clean_names(pokemon)
 
-titanic$pclass =  factor(titanic$pclass)
+# question 1
+# Filter entire dataset
+filtered_pokemon <- filter(clean_pokemon, type_1 == "Bug" | type_1 == "Fire" 
+                           | type_1 == "Grass" | type_1== "Normal" | 
+                             type_1 == "Water" | type_1 == "Psychic")
 
-
-class(titanic$survived)
-class(titanic$pclass)
-
-
-
-# Q1 SPLIT
-titanic_split <- initial_split(titanic, strata = survived, prop = 0.8)
-
-titanic_train <- training(titanic_split)
-titanic_test <- testing(titanic_split)
+# Convert type_1 and legendary to factors
+filtered_pokemon$type_1 <- factor(filtered_pokemon$type_1)
+filtered_pokemon$legendary <- factor(filtered_pokemon$legendary)
 
 
-titanic_recipe <- recipe(survived ~ pclass + sex + age + sib_sp + parch + fare, data = titanic_train) %>% 
-  step_impute_linear(age, impute_with = imp_vars(sib_sp)) %>%
-  step_dummy(all_nominal_predictors()) %>% 
-  step_interact(~ starts_with("sex"):age + age:fare)
+set.seed(777)
+
+# Initial split
+pokemon_split <- initial_split(filtered_pokemon, strata = type_1, prop = 0.8)
+
+pokemon_train <- training(pokemon_split)
+pokemon_test <- testing(pokemon_split)
+
+# Folding Training Data
+set.seed(777)
+pokemon_fold <- vfold_cv(pokemon_train, v = 5, strata = type_1)
+
+# Recipe
+pokemon_recipe <- recipe(type_1 ~ legendary + generation + sp_atk + attack 
+                         + speed + defense + hp + sp_def, data = pokemon_train) %>%
+  step_dummy(all_nominal_predictors()) %>%   # creates dummy variables
+  step_normalize(all_predictors())    # Centers and Scales all variables
 
 
+  # Q3 
 
-# Q2 
-# Creating tuned recipe for use later in workflows
+# general decision tree specification
+tree_spec <- decision_tree() %>%
+  set_engine("rpart")
 
-titanic_tuned_rec <- titanic_recipe %>%
-  step_poly(pclass, sex,age , sib_sp, parch, fare, degree = tune()) # polynomial regression
-
-# rsample object of the cross-validation resamples
-
-titanic_folds <- vfold_cv(titanic_train, v = 10) # Here ISLR uses v instead of k but they are interchangeable, common values include 5 or 10
-titanic_folds # creates the k-Fold data set
-
-# tibble with hyperparameter values we are exploring
-degree_grid <- grid_regular(degree(range = c(1, 10)), levels = 10)
-degree_grid 
-
-# Q4
-
-# Logistic regression
-# We will use the recipe created in Question 2 to create workflows
-
-# Logistic regression
-log_reg <- logistic_reg() %>% 
-  set_engine("glm") %>% 
+# classificaition decision tree engine/model
+class_tree_spec <- tree_spec %>%
   set_mode("classification")
 
-titanic_log_wf <- workflow() %>%  # log workflow
-  add_recipe(titanic_recipe) %>%
-  add_model(log_reg)
+# Workflow tuning cost complexity
+class_tree_wf <- workflow() %>%
+  add_model(class_tree_spec %>% set_args(cost_complexity = tune())) %>%
+  add_recipe(pokemon_recipe)
 
-# LDA
-# Linear discriminant analysis
-lda_mod <- discrim_linear() %>% 
-  set_mode("classification") %>% 
-  set_engine("MASS")
+# setup grid
+set.seed(777)
 
-titanic_lda_wf <- workflow() %>%  # lda workflow
-  add_recipe(titanic_recipe) %>%
-  add_model(lda_mod)
+param_grid <- grid_regular(cost_complexity(range = c(-3, -1)), levels = 10)
 
-# QDA
-# Quadratic discriminant analysis
-qda_mod <- discrim_quad() %>% 
-  set_mode("classification") %>% 
-  set_engine("MASS")
+tune_res_tree <- tune_grid(
+  class_tree_wf, 
+  resamples = pokemon_fold, 
+  grid = param_grid, 
+  metrics = metric_set(roc_auc)
+)
 
-titanic_qda_wf <- workflow() %>%  # qda workflow
-  add_model(qda_mod) %>% 
-  add_recipe(titanic_recipe)
+  # Q5
+#fit model
+best_model <- select_best(tune_res_tree)
 
-# Q5 FIT MODELS
+class_tree_final <- finalize_workflow(class_tree_wf, best_model)
 
-# LOG REG
-fit_log <- fit_resamples(  
-  titanic_log_wf,
-  titanic_folds,
-  control = control_resamples(verbose = TRUE))
+class_tree_final_fit <- fit(class_tree_final, data = pokemon_train)
 
+# Random forest model and workflow
+rf_mod <- rand_forest(mtry = tune(), trees = tune(), min_n = tune()) %>%
+  set_engine("ranger", importance = "impurity") %>%
+  set_mode("classification")
 
-# fit_resamples fits computes performance metrics across our specified resamples
-# the control option prints out progress which helps with models that take a long time to fit
+rf_wf <- workflow() %>%
+  add_recipe(pokemon_recipe) %>%
+  add_model(rf_mod)
 
+# grid
+param_grid <- grid_regular(mtry(range = c(2, 6)), 
+                           trees(range = c(2, 5)), 
+                           min_n(), levels = c(8,8,8)) # I am not sure what a good range for min_n would be
 
-# LDA
-fit_lda <- fit_resamples(  
-  titanic_lda_wf,
-  titanic_folds,
-  control = control_resamples(verbose = TRUE))
+  # Q6
+tune_res_rf <- tune_grid(
+  rf_wf, 
+  resamples = pokemon_fold, 
+  grid = param_grid, 
+  metrics = metric_set(roc_auc)
+)
 
+  # Q9
+boost_spec <- boost_tree(trees = tune()) %>%
+  set_engine("xgboost") %>%
+  set_mode("classification")
 
+boost_wf <- workflow() %>%
+  add_recipe(pokemon_recipe) %>%
+  add_model(boost_spec)
 
-# QDA
+# grid
+param_grid <- grid_regular(trees(range = c(10, 2000)), levels = 10)
 
-fit_qda <- fit_resamples(  
-  titanic_qda_wf,
-  titanic_folds,
-  control = control_resamples(verbose = TRUE))
+tune_res_boost <- tune_grid(
+  boost_wf, 
+  resamples = pokemon_fold, 
+  grid = param_grid, 
+  metrics = metric_set(roc_auc)
+)
 
 
 
 # SAVING ALL THE FITS
-save(fit_log,fit_lda, fit_qda,file = "fittedmodels.rda")
-rm(fit_lda,fit_log,fit_qda)
-load(file = "fittedmodels.rda")
+save(tune_res_tree,tune_res_rf,tune_res_boost, file = "tunedmodels.rda")
+rm(tune_res_tree,tune_res_rf,tune_res_boost)
+load(file = "tunedmodels.rda")
